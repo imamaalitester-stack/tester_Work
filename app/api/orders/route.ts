@@ -1,6 +1,23 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
+async function getAuthenticatedUser(request: Request, supabase: ReturnType<typeof getSupabase>) {
+  if (!supabase) return null;
+
+  const authHeader = request.headers.get("authorization") ?? "";
+  const token = authHeader.toLowerCase().startsWith("bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+
+  if (!token) return null;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser(token);
+
+  return user ?? null;
+}
+
 export async function GET() {
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ orders: [] });
@@ -18,7 +35,7 @@ export async function GET() {
     { orders: data },
     {
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN ?? "",
       },
     },
   );
@@ -27,6 +44,11 @@ export async function GET() {
 export async function POST(request: Request) {
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 503 });
+
+  const user = await getAuthenticatedUser(request, supabase);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await request.json();
 
@@ -50,6 +72,11 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 503 });
+
+  const user = await getAuthenticatedUser(request, supabase);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
